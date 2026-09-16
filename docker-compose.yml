@@ -1,0 +1,17 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: carreira_rag_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: carreira
+      POSTGRES_PASSWORD: carreira123
+      POSTGRES_DB: carreira_rag
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docs/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+volumes:
+  pgdata:
