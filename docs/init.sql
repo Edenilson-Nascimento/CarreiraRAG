@@ -3,9 +3,10 @@ CREATE EXTENSION IF NOT EXISTS vector;
 CREATE TABLE IF NOT EXISTS documentos (
     id SERIAL PRIMARY KEY,
     tipo TEXT NOT NULL CHECK (tipo IN ('curriculo', 'vaga')),
+    chunk_index INT NOT NULL DEFAULT 0,
     titulo TEXT NOT NULL,
     conteudo TEXT NOT NULL,
-    embedding VECTOR(1536),
+    embedding VECTOR(768),  -- dimensão do modelo gemini-embedding-001 (configurada em 768)
     criado_em TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

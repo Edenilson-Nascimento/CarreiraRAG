@@ -3,3 +3,5 @@ uvicorn[standard]==0.30.6
 psycopg2-binary==2.9.10
 python-dotenv==1.0.1
 pydantic==2.9.2
+google-genai==1.30.0
+pgvector==0.3.6
