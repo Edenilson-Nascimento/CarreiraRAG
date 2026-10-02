@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 
 from app.chunking import dividir_em_chunks
@@ -180,3 +180,62 @@ def perguntar(pergunta: PerguntaIn):
 
     fontes = sorted({c["titulo"] for c in chunks})
     return PerguntaOut(pergunta=pergunta.pergunta, resposta=resposta_texto, fontes=fontes)
+
+
+class PerguntaHistoricoOut(BaseModel):
+    id: int
+    pergunta: str
+    resposta: str
+    criado_em: datetime
+
+
+class HistoricoResumo(BaseModel):
+    total: int
+
+
+@app.get("/historico", response_model=list[PerguntaHistoricoOut])
+def listar_historico(
+    pergunta_exata: str | None = Query(default=None, description="Filtra por texto exato da pergunta"),
+    limite: int = Query(default=10, ge=1, le=100),
+    pagina: int = Query(default=1, ge=1),
+):
+    offset = (pagina - 1) * limite
+
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            if pergunta_exata:
+                cur.execute(
+                    """
+                    SELECT id, pergunta, resposta, criado_em
+                    FROM perguntas
+                    WHERE pergunta = %s
+                    ORDER BY criado_em DESC
+                    LIMIT %s OFFSET %s
+                    """,
+                    (pergunta_exata, limite, offset),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT id, pergunta, resposta, criado_em
+                    FROM perguntas
+                    ORDER BY criado_em DESC
+                    LIMIT %s OFFSET %s
+                    """,
+                    (limite, offset),
+                )
+            return cur.fetchall()
+    finally:
+        conn.close()
+
+
+@app.get("/historico/total", response_model=HistoricoResumo)
+def total_perguntas():
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS total FROM perguntas")
+            return cur.fetchone()
+    finally:
+        conn.close()
