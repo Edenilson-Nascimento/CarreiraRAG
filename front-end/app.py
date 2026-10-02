@@ -1,7 +1,9 @@
+import os
 import requests
 import streamlit as st
 
-API_URL = "http://127.0.0.1:8000"
+
+API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
 
 st.set_page_config(page_title="CarreiraRAG", page_icon="💼")
 st.title("💼 CarreiraRAG")
@@ -16,8 +18,8 @@ with st.sidebar:
 
     with st.form("form_cadastro", clear_on_submit=True):
         tipo = st.selectbox("Tipo", ["curriculo", "vaga"])
-        titulo = st.text_input("Título")
-        conteudo = st.text_area("Conteúdo", height=200)
+        titulo = st.text_input("Título (ex: Vaga Desenvolvedor Python ou Currículo João Silva)")
+        conteudo = st.text_area("Conteúdo (ex: Informações sobre a vaga ou o candidato)", height=200)
         enviar = st.form_submit_button("Cadastrar", use_container_width=True)
 
     if enviar:
@@ -48,6 +50,10 @@ with st.sidebar:
     except requests.exceptions.ConnectionError:
         st.error("Backend offline. Rode `uvicorn app.main:app --reload`.")
 
+    st.write("---")
+
+    st.caption("© 2026 - Edenilson Nascimento.")
+
 
 for autor, texto in st.session_state.mensagens:
     with st.chat_message(autor):
@@ -74,3 +80,7 @@ if pergunta:
             erro = resposta.json().get("detail", resposta.text)
             st.warning(erro)
             st.session_state.mensagens.append(("assistant", erro))
+
+
+
+    
