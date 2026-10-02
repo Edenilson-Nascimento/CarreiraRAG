@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from app.chunking import dividir_em_chunks
 from app.database import get_connection
-from app.gemini_client import gerar_embedding
+from app.gemini_client import gerar_embedding, gerar_resposta
 
 app = FastAPI(title="CarreiraRAG API")
 
@@ -29,6 +29,16 @@ class DocumentoCriadoResumo(BaseModel):
     titulo: str
     chunks_criados: int
     ids: list[int]
+
+
+class PerguntaIn(BaseModel):
+    pergunta: str
+
+
+class PerguntaOut(BaseModel):
+    pergunta: str
+    resposta: str
+    fontes: list[str]
 
 
 @app.get("/health")
@@ -83,9 +93,90 @@ def listar_documentos():
                 """
                 SELECT id, tipo, titulo, chunk_index, conteudo, criado_em
                 FROM documentos
+                WHERE embedding <=> %s::vector < %s
                 ORDER BY titulo, chunk_index
                 """
             )
             return cur.fetchall()
     finally:
         conn.close()
+
+
+def buscar_chunks_relevantes(embedding_pergunta: list[float], limite: int = 5, limiar_maximo: float = 0.65) -> list[dict]:
+    conn = get_connection()
+    vetor_str = "[" + ",".join(str(x) for x in embedding_pergunta) + "]"
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT tipo, titulo, conteudo, embedding <=> %s::vector AS distancia
+                FROM documentos
+                WHERE embedding <=> %s::vector < %s
+                ORDER BY distancia
+                LIMIT %s
+                """,
+                (vetor_str, vetor_str, limiar_maximo, limite),
+            )
+            return cur.fetchall()
+    finally:
+        conn.close()
+
+
+def montar_prompt(pergunta: str, chunks: list[dict]) -> str:
+    documentos_formatados = []
+    for c in chunks:
+        doc = f"""---
+[DOCUMENTO: {c['titulo']} | TIPO: {c['tipo']}]
+{c['conteudo']}
+---"""
+        documentos_formatados.append(doc)
+
+    contexto = "\n\n".join(documentos_formatados)
+
+    return f"""Você é um assistente técnico especializado em recrutamento e análise de compatibilidade entre candidatos e vagas.
+
+Sua tarefa é responder à pergunta do usuário baseando-se EXCLUSIVAMENTE nas informações fornecidas na seção CONTEXTO abaixo.
+
+REGRAS OBRIGATÓRIAS:
+1. Responda apenas com base em fatos expressamente declarados no contexto.
+2. Não invente, deduza ou extrapole informações ausentes.
+3. Se o contexto não contiver dados suficientes para responder com certeza, afirme claramente: "Não há informações suficientes nos documentos fornecidos para responder a essa pergunta."
+4. Ao citar uma experiência, habilidade ou requisito, mencione o nome do documento de origem de onde a informação foi extraída.
+5. Seja direto, conciso e profissional em português.
+
+CONTEXTO:
+{contexto}
+
+PERGUNTA DO USUÁRIO:
+{pergunta}
+
+RESPOSTA:"""
+
+
+@app.post("/perguntar", response_model=PerguntaOut)
+def perguntar(pergunta: PerguntaIn):
+    embedding_pergunta = gerar_embedding(pergunta.pergunta, task_type="RETRIEVAL_QUERY")
+
+    chunks = buscar_chunks_relevantes(embedding_pergunta)
+    if not chunks:
+        raise HTTPException(
+            status_code=404,
+            detail="Nenhum documento cadastrado ainda. Cadastre um currículo ou vaga primeiro.",
+        )
+
+    prompt = montar_prompt(pergunta.pergunta, chunks)
+    resposta_texto = gerar_resposta(prompt)
+
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO perguntas (pergunta, resposta) VALUES (%s, %s)",
+                (pergunta.pergunta, resposta_texto),
+            )
+            conn.commit()
+    finally:
+        conn.close()
+
+    fontes = sorted({c["titulo"] for c in chunks})
+    return PerguntaOut(pergunta=pergunta.pergunta, resposta=resposta_texto, fontes=fontes)

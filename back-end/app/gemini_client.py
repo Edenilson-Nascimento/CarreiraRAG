@@ -1,12 +1,17 @@
 import os
-
+import time
 from google import genai
 from google.genai import types
+from google.genai.errors import ServerError
 
 client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
 MODELO_EMBEDDING = "gemini-embedding-001"
-MODELO_CHAT = "gemini-2.0-flash"
+MODELOS_CHAT_PRIORIDADE = [
+    "gemini-2.5-flash",
+    "gemini-1.5-flash",
+    "gemini-3.8-flash",
+]
 DIMENSOES_EMBEDDING = 768
 
 
@@ -23,8 +28,21 @@ def gerar_embedding(texto: str, task_type: str = "RETRIEVAL_DOCUMENT") -> list[f
 
 
 def gerar_resposta(prompt: str) -> str:
-    resposta = client.models.generate_content(
-        model=MODELO_CHAT,
-        contents=prompt,
-    )
-    return resposta.text
+    ultimo_erro = None
+    for modelo in MODELOS_CHAT_PRIORIDADE:
+        try:
+            resposta = client.models.generate_content(
+                model=modelo,
+                contents=prompt,
+            )
+            return resposta.text
+        except ServerError as e:
+            # Captura erro 503 e tenta o próximo modelo da lista
+            ultimo_erro = e
+            time.sleep(1)
+            continue
+        except Exception as e:
+            ultimo_erro = e
+            break
+
+    raise ultimo_erro
