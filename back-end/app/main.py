@@ -93,7 +93,6 @@ def listar_documentos():
                 """
                 SELECT id, tipo, titulo, chunk_index, conteudo, criado_em
                 FROM documentos
-                WHERE embedding <=> %s::vector < %s
                 ORDER BY titulo, chunk_index
                 """
             )
