@@ -11,8 +11,7 @@ CREATE TABLE IF NOT EXISTS documentos (
 );
 
 CREATE INDEX IF NOT EXISTS documentos_embedding_idx
-    ON documentos USING hnsw (embedding vector_cosine_ops)
-    WITH (lists = 100);
+    ON documentos USING hnsw (embedding vector_cosine_ops);
 
 CREATE TABLE IF NOT EXISTS perguntas (
     id SERIAL PRIMARY KEY,

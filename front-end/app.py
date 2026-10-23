@@ -40,15 +40,17 @@ with st.sidebar:
     st.divider()
     st.header("📚 Documentos cadastrados")
     try:
-        docs = requests.get(f"{API_URL}/documentos").json()
+        resposta_docs = requests.get(f"{API_URL}/documentos", timeout=90)
+        resposta_docs.raise_for_status()
+        docs = resposta_docs.json()
         titulos_unicos = sorted({d["titulo"] for d in docs})
         if titulos_unicos:
             for t in titulos_unicos:
                 st.write(f"- {t}")
         else:
             st.write("Nenhum documento ainda.")
-    except requests.exceptions.ConnectionError:
-        st.error("Backend offline. Rode `uvicorn app.main:app --reload`.")
+    except (requests.exceptions.RequestException, ValueError):
+        st.info("O servidor está iniciando (plano gratuito). Aguarde cerca de 1 minuto e recarregue a página.")
 
     st.write("---")
 
@@ -67,20 +69,27 @@ if pergunta:
         st.write(pergunta)
 
     with st.chat_message("assistant"):
-        with st.spinner("Buscando contexto e gerando resposta..."):
-            resposta = requests.post(f"{API_URL}/perguntar", json={"pergunta": pergunta})
-
-        if resposta.status_code == 200:
-            dados = resposta.json()
-            st.write(dados["resposta"])
-            if dados["fontes"]:
-                st.caption("Fontes: " + ", ".join(dados["fontes"]))
-            st.session_state.mensagens.append(("assistant", dados["resposta"]))
-        else:
-            erro = resposta.json().get("detail", resposta.text)
-            st.warning(erro)
-            st.session_state.mensagens.append(("assistant", erro))
-
+        try:
+            with st.spinner("Buscando contexto e gerando resposta..."):
+                resposta = requests.post(
+                    f"{API_URL}/perguntar", json={"pergunta": pergunta}, timeout=90
+                )
+            if resposta.status_code == 200:
+                dados = resposta.json()
+                texto_resposta = dados["resposta"]
+                st.write(texto_resposta)
+                if dados["fontes"]:
+                    st.caption("Fontes: " + ", ".join(dados["fontes"]))
+            else:
+                try:
+                    texto_resposta = resposta.json().get("detail", resposta.text)
+                except ValueError:
+                    texto_resposta = "O servidor não respondeu como esperado. Tente novamente em instantes."
+                st.warning(texto_resposta)
+        except requests.exceptions.RequestException:
+            texto_resposta = "Não consegui falar com o servidor. Ele pode estar iniciando (plano gratuito); aguarde cerca de 1 minuto e tente de novo."
+            st.warning(texto_resposta)
+        st.session_state.mensagens.append(("assistant", texto_resposta))
 
 
     
