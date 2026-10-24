@@ -2,6 +2,7 @@ import os
 import time
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 
 API_URL = os.getenv("API_URL", "http://127.0.0.1:8000")
 
@@ -15,13 +16,19 @@ def verificar_e_acordar_backend():
     if st.session_state.get("backend_online", False):
         return True
 
+    # Pede ao NAVEGADOR do visitante para acordar o backend (equivale a abrir o
+    # link do backend numa aba). A resposta é opaca: só precisamos que o pedido saia.
+    components.html(
+        f"<script>fetch('{API_URL}/health', {{mode: 'no-cors'}}).catch(() => {{}});</script>",
+        height=0,
+    )
+
     status_placeholder = st.empty()
     tentativas = 15
-    intervalo = 8  # Checa a cada 8s (até ~120s total para o plano free do Render)
+    intervalo = 8
 
     for i in range(tentativas):
         try:
-            # Rota leve do FastAPI para checagem rápida
             resposta = requests.get(f"{API_URL}/health", timeout=15)
             if resposta.status_code == 200:
                 status_placeholder.empty()
@@ -31,14 +38,14 @@ def verificar_e_acordar_backend():
             pass
 
         status_placeholder.warning(
-            f"⏳ Conectando ao servidor backend (inicializando instância gratuita)... "
-            f"Tentativa {i + 1}/{tentativas}. Aguarde cerca de 1 minuto."
+            f"⏳ Conectando ao servidor (instância gratuita inicializando)... "
+            f"Tentativa {i + 1}/{tentativas}. Isso pode levar até 2 minutos."
         )
         time.sleep(intervalo)
 
-    status_placeholder.error(
-        "❌ O backend demorou muito para responder. Por favor, recarregue a página em instantes."
-    )
+    status_placeholder.error("❌ O servidor demorou para responder.")
+    st.link_button("Abrir o servidor para acordá-lo", f"{API_URL}/health")
+    st.caption('Quando aparecer {"status":"ok",...}, volte aqui e recarregue esta página.')
     return False
 
 
